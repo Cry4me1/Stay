@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stay Audio Engine Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 300;
+            margin-bottom: 10px;
+            letter-spacing: 0.1em;
+        }
+
+        .subtitle {
+            font-size: 0.9rem;
+            opacity: 0.6;
+            margin-bottom: 30px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        button {
+            padding: 14px 32px;
+            font-size: 1rem;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            backdrop-filter: blur(10px);
+            min-width: 120px;
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        button.active {
+            background: rgba(100, 200, 255, 0.3);
+            box-shadow: 0 0 25px rgba(100, 200, 255, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .volume-control {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 40px;
+        }
+
+        input[type="range"] {
+            width: 200px;
+            appearance: none;
+            -webkit-appearance: none;
+            background: rgba(255, 255, 255, 0.1);
+            height: 6px;
+            border-radius: 3px;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #64c8ff;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(100, 200, 255, 0.5);
+        }
+
+        .visualizer {
+            display: flex;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .meter {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .meter-bar {
+            width: 50px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 25px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .meter-fill {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, #64c8ff, #ff6b9d);
+            border-radius: 25px;
+            transition: height 0.08s ease;
+        }
+
+        .meter-label {
+            font-size: 0.8rem;
+            opacity: 0.6;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .background-effect {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            z-index: -1;
+            opacity: 0.6;
+            transition: background 0.5s ease;
+        }
+
+        .status {
+            font-size: 0.85rem;
+            opacity: 0.5;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .loading {
+            opacity: 0.6;
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="background-effect" id="bgEffect"></div>
+
+    <h1>Stay</h1>
+    <p class="subtitle">环境音 · 陪你待着</p>
+
+    <div class="controls">
+        <button id="btnRain" data-scene="rain">🌧 雨声</button>
+        <button id="btnCafe" data-scene="cafe">☕ 咖啡馆</button>
+        <button id="btnWind" data-scene="wind">🌬 风声</button>
+        <button id="btnStop">⏹ 停止</button>
+    </div>
+
+    <div class="volume-control">
+        <span>🔈</span>
+        <input type="range" id="volumeSlider" min="0" max="100" value="70">
+        <span>🔊</span>
+    </div>
+
+    <div class="visualizer">
+        <div class="meter">
+            <div class="meter-bar">
+                <div class="meter-fill" id="lowMeter"></div>
+            </div>
+            <div class="meter-label">低频</div>
+        </div>
+        <div class="meter">
+            <div class="meter-bar">
+                <div class="meter-fill" id="midMeter"></div>
+            </div>
+            <div class="meter-label">中频</div>
+        </div>
+        <div class="meter">
+            <div class="meter-bar">
+                <div class="meter-fill" id="highMeter"></div>
+            </div>
+            <div class="meter-label">高频</div>
+        </div>
+        <div class="meter">
+            <div class="meter-bar">
+                <div class="meter-fill" id="volumeMeter"></div>
+            </div>
+            <div class="meter-label">音量</div>
+        </div>
+    </div>
+
+    <div class="status" id="status">点击场景开始播放</div>
+
+    <script type="module">
+        import { AudioEngine } from './src/audio/AudioEngine.js';
+
+        const engine = new AudioEngine();
+
+        // DOM
+        const buttons = document.querySelectorAll('[data-scene]');
+        const btnStop = document.getElementById('btnStop');
+        const volumeSlider = document.getElementById('volumeSlider');
+        const statusEl = document.getElementById('status');
+        const bgEffect = document.getElementById('bgEffect');
+
+        const lowMeter = document.getElementById('lowMeter');
+        const midMeter = document.getElementById('midMeter');
+        const highMeter = document.getElementById('highMeter');
+        const volumeMeter = document.getElementById('volumeMeter');
+
+        let isInitialized = false;
+
+        async function ensureInit() {
+            if (!isInitialized) {
+                statusEl.textContent = '初始化中...';
+                statusEl.classList.add('loading');
+                await engine.init();
+                isInitialized = true;
+                statusEl.classList.remove('loading');
+                statusEl.textContent = '加载音频中...';
+            }
+        }
+
+        // 场景按钮
+        buttons.forEach(btn => {
+            btn.addEventListener('click', async () => {
+                await ensureInit();
+
+                const scene = btn.dataset.scene;
+
+                btn.disabled = true;
+                statusEl.textContent = `加载 ${scene}...`;
+                statusEl.classList.add('loading');
+
+                try {
+                    await engine.switchScene(scene);
+
+                    buttons.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+
+                    statusEl.textContent = `正在播放: ${scene}`;
+                    statusEl.classList.remove('loading');
+                } catch (e) {
+                    statusEl.textContent = `加载失败，请检查音频文件`;
+                    console.error(e);
+                }
+
+                btn.disabled = false;
+            });
+        });
+
+        // 停止
+        btnStop.addEventListener('click', async () => {
+            await engine.stop();
+            buttons.forEach(b => b.classList.remove('active'));
+            statusEl.textContent = '已停止';
+        });
+
+        // 音量
+        volumeSlider.addEventListener('input', () => {
+            engine.setVolume(volumeSlider.value / 100);
+        });
+
+        // 可视化
+        function updateVisualizer() {
+            const data = engine.getAudioData();
+
+            lowMeter.style.height = `${data.lowFrequency * 100}%`;
+            midMeter.style.height = `${data.midFrequency * 100}%`;
+            highMeter.style.height = `${data.highFrequency * 100}%`;
+            volumeMeter.style.height = `${data.volume * 100}%`;
+
+            // 背景效果
+            const hue = 200 + data.lowFrequency * 50;
+            const sat = 30 + data.midFrequency * 20;
+            const light = 8 + data.volume * 12;
+
+            bgEffect.style.background = `
+        radial-gradient(
+          ellipse at 50% 50%,
+          hsla(${hue}, ${sat}%, ${light + 8}%, 0.4) 0%,
+          hsla(${hue + 20}, ${sat}%, ${light}%, 0.1) 100%
+        )
+      `;
+
+            requestAnimationFrame(updateVisualizer);
+        }
+        updateVisualizer();
+
+        // 环境音网站保持后台播放，不暂停
+    </script>
+</body>
+
+</html>
